@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>割合の信頼区間 — ビジュアル統計</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d0d12;
+    --panel:   #141420;
+    --border:  #252535;
+    --border2: #2e2e45;
+    --text:    #e2e8f0;
+    --muted:   #8892a4;
+    --accent:  #818cf8;
+    --wilson:  #34d399;
+    --exact:   #a78bfa;
+    --normal:  #f59e0b;
+    --phat:    #fb7185;
+    --font:    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:    'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  header span { color: var(--muted); font-size: 12px; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── LEFT PANEL ── */
+  .controls {
+    width: 270px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* Slider + number input */
+  .param-block { display: flex; flex-direction: column; gap: 6px; }
+  .param-block + .param-block { margin-top: 12px; }
+
+  .param-row { display: flex; align-items: center; gap: 8px; }
+  .param-label { font-size: 13px; flex: 1; }
+
+  input[type=number] {
+    width: 62px;
+    padding: 3px 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: right;
+    outline: none;
+    -moz-appearance: textfield;
+  }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+  input[type=number]:focus { border-color: var(--accent); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+
+  .sub-label { font-size: 11px; color: var(--muted); }
+
+  /* Confidence level */
+  .btn-group { display: flex; gap: 6px; }
+  .btn-conf {
+    flex: 1;
+    padding: 7px 0;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+  .btn-conf:hover { border-color: var(--accent); color: var(--text); }
+  .btn-conf.active {
+    background: rgba(129,140,248,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Presets */
+  .presets { display: flex; flex-direction: column; gap: 6px; }
+  .preset-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font);
+    text-align: left;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); background: rgba(129,140,248,0.06); }
+  .preset-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(129,140,248,0.1); }
+  .preset-tag { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* Method toggles */
+  .method-toggles { display: flex; flex-direction: column; gap: 6px; }
+  .method-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    font-family: var(--font);
+    text-align: left;
+    width: 100%;
+  }
+  .method-toggle:hover { background: rgba(255,255,255,0.03); }
+  .method-toggle.off { opacity: 0.35; }
+  .toggle-swatch {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+  .toggle-body { flex: 1; min-width: 0; }
+  .toggle-name { font-size: 12px; color: var(--text); }
+  .toggle-vals {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toggle-check {
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  /* p̂ row */
+  .phat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    opacity: 0.7;
+  }
+  .phat-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--phat); flex-shrink: 0; }
+  .phat-label { font-size: 12px; color: var(--text); flex: 1; }
+  .phat-val { font-family: var(--mono); font-size: 12px; color: var(--phat); }
+
+  /* ── RIGHT PANEL ── */
+  .right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .viz { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .stat-card .value { font-family: var(--mono); font-size: 18px; font-weight: 600; }
+
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px 12px;
+  }
+  .chart-panel h3 {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .chart-panel svg { width: 100%; display: block; }
+
+  /* Warning */
+  .warning-wrap { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+  .warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.3);
+    color: var(--normal);
+    border-radius: 4px;
+    padding: 3px 9px;
+    font-size: 11px;
+  }
+
+  /* Method notes */
+  .method-notes { display: flex; flex-direction: column; gap: 7px; }
+  .method-note {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 0 8px 8px 0;
+    padding: 9px 13px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+    transition: opacity 0.2s;
+  }
+  .method-note.off { opacity: 0.3; }
+  .method-note strong { color: var(--text); display: block; margin-bottom: 2px; font-size: 13px; }
+
+  /* Prompt bar */
+  .prompt-bar {
+    border-top: 1px solid var(--border);
+    padding: 11px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .prompt-text { flex: 1; font-size: 12px; line-height: 1.5; color: var(--muted); font-style: italic; }
+  .copy-btn {
+    padding: 6px 14px;
+    background: rgba(129,140,248,0.15);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font);
+    white-space: nowrap;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .copy-btn:hover { background: rgba(129,140,248,0.25); }
+  .copy-btn.copied { background: rgba(52,211,153,0.15); border-color: var(--wilson); color: var(--wilson); }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>割合の信頼区間</h1>
+  <span>Wilson / Clopper-Pearson / 正規近似 — 手法を比較</span>
+</header>
+
+<div class="main">
+
+  <!-- ── CONTROLS ── -->
+  <div class="controls">
+
+    <div>
+      <div class="section-label">パラメータ</div>
+      <div class="param-block">
+        <div class="param-row">
+          <span class="param-label">サンプルサイズ <i>n</i></span>
+          <input type="number" id="num-n" min="1" max="10000" value="100">
+        </div>
+        <input type="range" id="sl-n" min="1" max="1000" value="100" step="1">
+      </div>
+      <div class="param-block">
+        <div class="param-row">
+          <span class="param-label">成功回数 <i>k</i></span>
+          <input type="number" id="num-k" min="0" max="100" value="50">
+        </div>
+        <input type="range" id="sl-k" min="0" max="100" value="50" step="1">
+        <div class="sub-label">標本割合 <i>p̂</i> = <span id="val-phat" style="color:var(--phat)">0.500</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">信頼水準</div>
+      <div class="btn-group">
+        <button class="btn-conf" data-conf="0.90">90%</button>
+        <button class="btn-conf active" data-conf="0.95">95%</button>
+        <button class="btn-conf" data-conf="0.99">99%</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">プリセット</div>
+      <div class="presets">
+        <button class="preset-btn active" data-preset="standard">
+          <span>標準サンプル</span><span class="preset-tag">n=100, k=50</span>
+        </button>
+        <button class="preset-btn" data-preset="small">
+          <span>小サンプル</span><span class="preset-tag">n=20, k=5</span>
+        </button>
+        <button class="preset-btn" data-preset="rare">
+          <span>稀少事象</span><span class="preset-tag">n=200, k=3</span>
+        </button>
+        <button class="preset-btn" data-preset="large">
+          <span>大サンプル</span><span class="preset-tag">n=1000, k=420</span>
+        </button>
+        <button class="preset-btn" data-preset="extreme">
+          <span>境界付近</span><span class="preset-tag">n=50, k=48</span>
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">手法 / 凡例</div>
+      <div class="method-toggles">
+        <button class="method-toggle" data-method="wilson">
+          <div class="toggle-swatch" style="background:var(--wilson)"></div>
+          <div class="toggle-body">
+            <div class="toggle-name">Wilson</div>
+            <div class="toggle-vals" id="tv-wilson">—</div>
+          </div>
+          <span class="toggle-check" id="tc-wilson">✓</span>
+        </button>
+        <button class="method-toggle" data-method="exact">
+          <div class="toggle-swatch" style="background:var(--exact)"></div>
+          <div class="toggle-body">
+            <div class="toggle-name">Clopper-Pearson</div>
+            <div class="toggle-vals" id="tv-exact">—</div>
+          </div>
+          <span class="toggle-check" id="tc-exact">✓</span>
+        </button>
+        <button class="method-toggle" data-method="normal">
+          <div class="toggle-swatch" style="background:var(--normal)"></div>
+          <div class="toggle-body">
+            <div class="toggle-name">正規近似 (Wald)</div>
+            <div class="toggle-vals" id="tv-normal">—</div>
+          </div>
+          <span class="toggle-check" id="tc-normal">✓</span>
+        </button>
+        <div class="phat-row">
+          <div class="phat-swatch"></div>
+          <span class="phat-label">標本割合 p̂</span>
+          <span class="phat-val" id="phat-legend">0.500</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT ── -->
+  <div class="right">
+    <div class="viz">
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">サンプル n</div>
+          <div class="value" id="card-n" style="color:var(--accent)">100</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">成功回数 k</div>
+          <div class="value" id="card-k" style="color:var(--accent)">50</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">標本割合 p̂</div>
+          <div class="value" id="card-phat" style="color:var(--phat)">0.500</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">z 値</div>
+          <div class="value" id="card-z" style="color:var(--muted)">1.960</div>
+        </div>
+      </div>
+
+      <!-- CI bars chart -->
+      <div class="chart-panel">
+        <h3>信頼区間の比較</h3>
+        <svg id="ci-svg" height="160"></svg>
+      </div>
+
+      <!-- Density chart -->
+      <div class="chart-panel">
+        <h3>Beta 事後分布と信頼区間</h3>
+        <svg id="density-svg" height="200"></svg>
+      </div>
+
+      <!-- Warnings -->
+      <div class="warning-wrap" id="warning-wrap"></div>
+
+      <!-- Method notes -->
+      <div class="method-notes">
+        <div class="method-note" id="note-wilson" style="border-left-color:var(--wilson)">
+          <strong>Wilson 区間（推奨）</strong>
+          スコア検定に基づく区間。p̂ が 0 や 1 に近い場合や小サンプルでも安定した被覆率を持つ。
+        </div>
+        <div class="method-note" id="note-exact" style="border-left-color:var(--exact)">
+          <strong>Clopper-Pearson 区間（正確区間）</strong>
+          二項分布のベータ関数を用いた正確区間。常に保守的（広め）で、名目上の信頼水準を保証する。
+        </div>
+        <div class="method-note" id="note-normal" style="border-left-color:var(--normal)">
+          <strong>正規近似区間（Wald 区間）</strong>
+          中心極限定理による近似。n が大きく p̂ が 0.5 付近なら有効だが、小サンプルや極端な割合では被覆率が低下する。
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Prompt -->
+    <div class="prompt-bar">
+      <div class="prompt-text" id="prompt-text"></div>
+      <button class="copy-btn" id="copy-btn">コピー</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  n: 100, k: 50, conf: 0.95,
+  visible: { wilson: true, exact: false, normal: false },
+};
+
+const PRESETS = {
+  standard: { n: 100,  k: 50,  conf: 0.95 },
+  small:    { n: 20,   k: 5,   conf: 0.95 },
+  rare:     { n: 200,  k: 3,   conf: 0.95 },
+  large:    { n: 1000, k: 420, conf: 0.95 },
+  extreme:  { n: 50,   k: 48,  conf: 0.95 },
+};
+
+const COLORS = { wilson: '#34d399', exact: '#a78bfa', normal: '#f59e0b', phat: '#fb7185' };
+
+// ── Math ───────────────────────────────────────────────────────────────────
+function lgamma(x) {
+  const g = 7;
+  const c = [0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+function betainc(x, a, b) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const lbeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  function betacf(x, a, b) {
+    const MAXIT = 300, EPS = 3e-10, FPMIN = 1e-30;
+    const qab = a + b, qap = a + 1, qam = a - 1;
+    let c = 1, d = 1 - qab * x / qap;
+    if (Math.abs(d) < FPMIN) d = FPMIN;
+    d = 1 / d; let h = d;
+    for (let m = 1; m <= MAXIT; m++) {
+      const m2 = 2 * m;
+      let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+      c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+      d = 1 / d; h *= d * c;
+      aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+      c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+      d = 1 / d; const del = d * c; h *= del;
+      if (Math.abs(del - 1) < EPS) break;
+    }
+    return h;
+  }
+  const bt = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbeta);
+  if (x < (a + 1) / (a + b + 2)) return bt * betacf(x, a, b) / a;
+  return 1 - bt * betacf(1 - x, b, a) / b;
+}
+
+function betainv(p, a, b) {
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  const mu = a / (a + b);
+  let x = Math.max(1e-6, Math.min(1 - 1e-6, mu));
+  const lbeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  for (let i = 0; i < 100; i++) {
+    const fx = betainc(x, a, b) - p;
+    const dfx = Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - lbeta);
+    if (dfx === 0) break;
+    const dx = fx / dfx;
+    x = Math.max(1e-8, Math.min(1 - 1e-8, x - dx));
+    if (Math.abs(dx) < 1e-10) break;
+  }
+  return x;
+}
+
+function betaPDF(x, a, b) {
+  if (x <= 0 || x >= 1) return 0;
+  const lbeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - lbeta);
+}
+
+function normalInvCDF(p) {
+  const a = [0,-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,
+    1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b = [0,-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,
+    6.680131188771972e+01,-1.328068155288572e+01];
+  const c = [-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,
+    -2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d = [7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const p_low = 0.02425, p_high = 1 - p_low;
+  if (p < p_low) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  } else if (p <= p_high) {
+    const q = p - 0.5, r = q*q;
+    return (((((a[1]*r+a[2])*r+a[3])*r+a[4])*r+a[5])*r+a[6])*q/(((((b[1]*r+b[2])*r+b[3])*r+b[4])*r+b[5])*r+1);
+  } else {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+  }
+}
+
+function computeCI(n, k, conf) {
+  const alpha = 1 - conf;
+  const z = normalInvCDF(1 - alpha / 2);
+  const phat = k / n;
+  const se = Math.sqrt(phat * (1 - phat) / n);
+  const normal = { lo: Math.max(0, phat - z * se), hi: Math.min(1, phat + z * se) };
+  const z2 = z * z, n2 = n + z2;
+  const center = (k + z2 / 2) / n2;
+  const margin = z * Math.sqrt(phat * (1 - phat) / n + z2 / (4 * n * n)) * n / n2;
+  const wilson = { lo: Math.max(0, center - margin), hi: Math.min(1, center + margin) };
+  const exact = {
+    lo: k === 0 ? 0 : betainv(alpha / 2, k, n - k + 1),
+    hi: k === n ? 1 : betainv(1 - alpha / 2, k + 1, n - k),
+  };
+  return { z, phat, normal, wilson, exact };
+}
+
+// ── Format ─────────────────────────────────────────────────────────────────
+function fmt4(v) { return v.toFixed(4); }
+function fmt3(v) { return v.toFixed(3); }
+
+// ── SVG helpers ────────────────────────────────────────────────────────────
+function svgLine(x1,y1,x2,y2,stroke,sw,dash='') {
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${sw}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+}
+function svgText(x,y,txt,fill,size,anchor='middle',dy=0) {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="${fill}" font-size="${size}" font-family="-apple-system,sans-serif"${dy ? ` dy="${dy}"` : ''}>${txt}</text>`;
+}
+
+// ── Render: CI bars ────────────────────────────────────────────────────────
+function renderCIBars(ci) {
+  const svg = document.getElementById('ci-svg');
+  const W = svg.clientWidth || 600, H = 160;
+  const PL = 110, PR = 16, PT = 20, PB = 26;
+  const CW = W - PL - PR, CH = H - PT - PB;
+  function px(v) { return PL + v * CW; }
+
+  const methods = [
+    { label: 'Wilson',          key: 'wilson', ci: ci.wilson, color: COLORS.wilson },
+    { label: 'Clopper-Pearson', key: 'exact',  ci: ci.exact,  color: COLORS.exact  },
+    { label: '正規近似 (Wald)', key: 'normal', ci: ci.normal, color: COLORS.normal },
+  ].filter(r => state.visible[r.key]);
+
+  const rowH = methods.length > 0 ? CH / methods.length : CH;
+  let s = '';
+
+  // Grid
+  for (let v = 0; v <= 10; v++) {
+    const x = px(v / 10);
+    const maj = v % 5 === 0;
+    s += svgLine(x, PT, x, PT + CH, maj ? '#2e2e45' : '#1e1e2e', maj ? 1 : 0.5);
+    if (maj) s += svgText(x, PT + CH + 14, v/10, '#6b7280', 10);
+  }
+
+  // p̂ line
+  const xp = px(ci.phat);
+  s += svgLine(xp, PT - 4, xp, PT + CH + 4, COLORS.phat, 1.5, '4 3');
+  s += svgText(xp, PT - 7, `p̂=${fmt3(ci.phat)}`, COLORS.phat, 10);
+
+  // Axis
+  s += svgLine(PL, PT + CH, PL + CW, PT + CH, '#2e2e45', 1);
+
+  // Bars
+  methods.forEach((row, i) => {
+    const cy = PT + (i + 0.5) * rowH;
+    const x1 = px(row.ci.lo), x2 = px(row.ci.hi);
+    const bh = 10;
+    s += `<rect x="${x1}" y="${cy-bh/2}" width="${Math.max(0,x2-x1)}" height="${bh}" rx="5" fill="${row.color}" opacity="0.2" stroke="${row.color}" stroke-width="1.5"/>`;
+    s += `<circle cx="${xp}" cy="${cy}" r="4" fill="${row.color}" opacity="0.9"/>`;
+    s += svgLine(x1, cy-7, x1, cy+7, row.color, 2);
+    s += svgLine(x2, cy-7, x2, cy+7, row.color, 2);
+    s += svgText(PL - 8, cy + 4, row.label, row.color, 11, 'end');
+    // 下限・中央・上限の数値ラベル
+    const loLabelX = Math.max(PL + 2, x1 - 2);
+    const hiLabelX = Math.min(PL + CW - 2, x2 + 2);
+    s += svgText(loLabelX, cy - 11, fmt4(row.ci.lo), row.color, 9, x1 < PL + 30 ? 'start' : 'end');
+    s += svgText(hiLabelX, cy - 11, fmt4(row.ci.hi), row.color, 9, x2 > PL + CW - 30 ? 'end' : 'start');
+    // 区間幅
+    const midX = (x1 + x2) / 2;
+    s += svgText(midX, cy + bh/2 + 12, `幅 ${fmt4(row.ci.hi - row.ci.lo)}`, row.color, 9, 'middle');
+  });
+
+  if (methods.length === 0) {
+    s += svgText(PL + CW/2, PT + CH/2 + 4, '手法を選択してください', '#444', 12);
+  }
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', H);
+  svg.innerHTML = s;
+}
+
+// ── Render: Density ────────────────────────────────────────────────────────
+function renderDensity(ci) {
+  const svg = document.getElementById('density-svg');
+  const W = svg.clientWidth || 600, H = 200;
+  const PL = 50, PR = 16, PT = 16, PB = 26;
+  const CW = W - PL - PR, CH = H - PT - PB;
+  function px(v) { return PL + v * CW; }
+
+  const { n, k } = state;
+  const a = k + 1, b = n - k + 1; // Beta posterior params
+
+  // Sample PDF
+  const STEPS = 300;
+  const xs = [], ys = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const x = i / STEPS;
+    xs.push(x);
+    ys.push(betaPDF(x, a, b));
+  }
+  const maxY = Math.max(...ys, 0.01);
+  function py(v) { return PT + CH - (v / maxY) * CH; }
+  function pyClamp(v) { return Math.max(PT, Math.min(PT + CH, py(v))); }
+
+  let s = '';
+
+  // Grid lines (horizontal)
+  for (let i = 0; i <= 4; i++) {
+    const y = PT + (i / 4) * CH;
+    s += svgLine(PL, y, PL + CW, y, '#1e1e2e', 0.5);
+  }
+  // Grid lines (vertical)
+  for (let v = 0; v <= 10; v++) {
+    const x = px(v / 10);
+    const maj = v % 5 === 0;
+    s += svgLine(x, PT, x, PT + CH, maj ? '#2e2e45' : '#1e1e2e', maj ? 1 : 0.5);
+    if (maj) s += svgText(x, PT + CH + 14, v/10, '#6b7280', 10);
+  }
+
+  // CI shaded regions (selected methods only)
+  const methods = [
+    { key: 'wilson', ci: ci.wilson, color: COLORS.wilson },
+    { key: 'exact',  ci: ci.exact,  color: COLORS.exact  },
+    { key: 'normal', ci: ci.normal, color: COLORS.normal },
+  ].filter(r => state.visible[r.key]);
+
+  methods.forEach(m => {
+    // Build shaded path under curve within CI
+    let path = '';
+    let started = false;
+    for (let i = 0; i <= STEPS; i++) {
+      const x = xs[i];
+      if (x < m.ci.lo || x > m.ci.hi) continue;
+      const sx = px(x), sy = pyClamp(ys[i]);
+      if (!started) {
+        path = `M${px(m.ci.lo)},${PT+CH} L${sx},${sy}`;
+        started = true;
+      } else {
+        path += ` L${sx},${sy}`;
+      }
+    }
+    if (started) {
+      path += ` L${px(m.ci.hi)},${PT+CH} Z`;
+      s += `<path d="${path}" fill="${m.color}" opacity="0.15"/>`;
+      // CI boundary lines + 数値ラベル
+      s += svgLine(px(m.ci.lo), PT, px(m.ci.lo), PT+CH, m.color, 1, '3 2');
+      s += svgLine(px(m.ci.hi), PT, px(m.ci.hi), PT+CH, m.color, 1, '3 2');
+      const loX = px(m.ci.lo), hiX = px(m.ci.hi);
+      s += svgText(loX - 3, PT + CH - 4, fmt4(m.ci.lo), m.color, 9, loX < PL + 30 ? 'start' : 'end');
+      s += svgText(hiX + 3, PT + CH - 4, fmt4(m.ci.hi), m.color, 9, hiX > PL + CW - 30 ? 'end' : 'start');
+    }
+  });
+
+  // Main curve (filled area)
+  let curvePath = `M${px(xs[0])},${PT+CH}`;
+  for (let i = 0; i <= STEPS; i++) {
+    curvePath += ` L${px(xs[i])},${pyClamp(ys[i])}`;
+  }
+  curvePath += ` L${px(xs[STEPS])},${PT+CH} Z`;
+  s += `<path d="${curvePath}" fill="rgba(129,140,248,0.06)" stroke="rgba(129,140,248,0.5)" stroke-width="1.5" stroke-linejoin="round"/>`;
+
+  // p̂ vertical
+  const xp = px(ci.phat);
+  s += svgLine(xp, PT, xp, PT + CH, COLORS.phat, 1.5, '4 3');
+  s += svgText(xp, PT - 4, `p̂`, COLORS.phat, 10);
+
+  // Axes
+  s += svgLine(PL, PT + CH, PL + CW, PT + CH, '#2e2e45', 1);
+  s += svgLine(PL, PT, PL, PT + CH, '#2e2e45', 1);
+  // y-axis label
+  s += svgText(12, PT + CH/2, '密度', '#6b7280', 10, 'middle');
+
+  // Mode label
+  const modePhat = (a - 1) / (a + b - 2);
+  if (a > 1 && b > 1) {
+    s += svgLine(px(modePhat), pyClamp(maxY), px(modePhat), pyClamp(maxY) - 10, '#818cf8', 1);
+    s += svgText(px(modePhat), pyClamp(maxY) - 14, `最頻値 ${fmt3(modePhat)}`, '#818cf8', 9);
+  }
+
+  // Beta label
+  s += svgText(PL + CW - 4, PT + 12, `Beta(${a}, ${b})`, '#444', 10, 'end');
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', H);
+  svg.innerHTML = s;
+}
+
+// ── Render: all ────────────────────────────────────────────────────────────
+function renderAll() {
+  const { n, k, conf, visible } = state;
+  const ci = computeCI(n, k, conf);
+
+  // Stats cards
+  document.getElementById('card-n').textContent = n;
+  document.getElementById('card-k').textContent = k;
+  document.getElementById('card-phat').textContent = fmt3(ci.phat);
+  document.getElementById('card-z').textContent = ci.z.toFixed(3);
+  document.getElementById('val-phat').textContent = fmt3(ci.phat);
+  document.getElementById('phat-legend').textContent = fmt3(ci.phat);
+
+  // Method toggles — update interval values
+  const methods = { wilson: ci.wilson, exact: ci.exact, normal: ci.normal };
+  for (const [key, interval] of Object.entries(methods)) {
+    const el = document.getElementById(`tv-${key}`);
+    if (el) el.textContent = `[${fmt4(interval.lo)}, ${fmt4(interval.hi)}]`;
+    const tog = document.querySelector(`.method-toggle[data-method="${key}"]`);
+    if (tog) tog.classList.toggle('off', !visible[key]);
+    const tc = document.getElementById(`tc-${key}`);
+    if (tc) tc.style.opacity = visible[key] ? '1' : '0';
+    const note = document.getElementById(`note-${key}`);
+    if (note) note.classList.toggle('off', !visible[key]);
+  }
+
+  renderCIBars(ci);
+  renderDensity(ci);
+  renderWarning(n, k);
+  renderPrompt(n, k, conf, ci);
+}
+
+function renderWarning(n, k) {
+  const phat = k / n;
+  const issues = [];
+  if (n < 30) issues.push(`小サンプル (n=${n}): 正規近似は不安定`);
+  if (n * phat < 5 || n * (1 - phat) < 5) issues.push(`np̂ または n(1-p̂) < 5: 正規近似の適用条件を満たさない`);
+  if (k === 0 || k === n) issues.push('p̂ = 0 または 1: 正規近似の区間幅がゼロ');
+  document.getElementById('warning-wrap').innerHTML =
+    issues.map(m => `<div class="warning">⚠ ${m}</div>`).join('');
+}
+
+function renderPrompt(n, k, conf, ci) {
+  const phat = fmt3(k / n);
+  const confPct = Math.round(conf * 100);
+  const active = ['wilson','exact','normal'].filter(m => state.visible[m]);
+  const parts = active.map(m => {
+    const names = { wilson: 'Wilson', exact: 'Clopper-Pearson', normal: '正規近似' };
+    const c = ci[m];
+    return `${names[m]}: [${fmt4(c.lo)}, ${fmt4(c.hi)}]`;
+  });
+  document.getElementById('prompt-text').textContent =
+    `n=${n}, k=${k}（p̂=${phat}）の${confPct}%信頼区間 — ${parts.join(' / ')}`;
+}
+
+// ── Sync helpers ───────────────────────────────────────────────────────────
+function setN(v) {
+  v = Math.max(1, Math.min(10000, Math.round(v)));
+  state.n = v;
+  if (state.k > v) state.k = v;
+  document.getElementById('sl-n').value = Math.min(v, 1000);
+  document.getElementById('sl-n').max = Math.max(1000, v);
+  document.getElementById('num-n').value = v;
+  document.getElementById('sl-k').max = v;
+  document.getElementById('num-k').max = v;
+  document.getElementById('num-k').value = state.k;
+  document.getElementById('sl-k').value = Math.min(state.k, v);
+}
+
+function setK(v) {
+  v = Math.max(0, Math.min(state.n, Math.round(v)));
+  state.k = v;
+  document.getElementById('sl-k').value = v;
+  document.getElementById('num-k').value = v;
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────
+document.getElementById('sl-n').addEventListener('input', e => {
+  setN(parseInt(e.target.value)); clearPreset(); renderAll();
+});
+document.getElementById('num-n').addEventListener('change', e => {
+  setN(parseInt(e.target.value) || 1); clearPreset(); renderAll();
+});
+document.getElementById('num-n').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { setN(parseInt(e.target.value) || 1); clearPreset(); renderAll(); }
+});
+
+document.getElementById('sl-k').addEventListener('input', e => {
+  setK(parseInt(e.target.value)); clearPreset(); renderAll();
+});
+document.getElementById('num-k').addEventListener('change', e => {
+  setK(parseInt(e.target.value) || 0); clearPreset(); renderAll();
+});
+document.getElementById('num-k').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { setK(parseInt(e.target.value) || 0); clearPreset(); renderAll(); }
+});
+
+document.querySelectorAll('.btn-conf').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn-conf').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.conf = parseFloat(btn.dataset.conf);
+    clearPreset(); renderAll();
+  });
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = PRESETS[btn.dataset.preset];
+    state.conf = p.conf;
+    setN(p.n); setK(p.k);
+    document.querySelectorAll('.btn-conf').forEach(b =>
+      b.classList.toggle('active', parseFloat(b.dataset.conf) === p.conf));
+    document.querySelectorAll('.preset-btn').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    renderAll();
+  });
+});
+
+document.querySelectorAll('.method-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const m = btn.dataset.method;
+    state.visible[m] = !state.visible[m];
+    renderAll();
+  });
+});
+
+function clearPreset() {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+}
+
+document.getElementById('copy-btn').addEventListener('click', () => {
+  const text = document.getElementById('prompt-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'コピー済 ✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'コピー'; btn.classList.remove('copied'); }, 1800);
+  });
+});
+
+window.addEventListener('resize', renderAll);
+renderAll();
+</script>
+</body>
+</html>
