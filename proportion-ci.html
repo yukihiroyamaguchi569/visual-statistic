@@ -305,6 +305,67 @@
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── RESPONSIVE ──────────────────────────── */
+  .drawer-toggle {
+    display: none;
+    background: none;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--muted);
+    padding: 4px 6px;
+    cursor: pointer;
+    margin-left: auto;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .drawer-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  @media (max-width: 1024px) {
+    body { height: auto; min-height: 100vh; overflow: auto; }
+    .main { flex-direction: column; overflow: visible; }
+    .drawer-toggle { display: flex; align-items: center; }
+    .controls {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      max-height: 0;
+      overflow: hidden;
+      padding: 0 16px;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+    .controls.open {
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 18px 16px;
+    }
+    .right { overflow: visible; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (min-width: 640px) and (max-width: 1024px) {
+    .controls.open {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    header { flex-wrap: wrap; padding: 10px 14px; }
+    header h1 { font-size: 14px; }
+    header span { font-size: 11px; width: 100%; order: 3; }
+    .drawer-toggle { order: 2; }
+    .viz { padding: 14px 12px; }
+    .prompt-bar { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+    .prompt-text { width: 100%; font-size: 11px; }
+    .copy-btn { width: 100%; text-align: center; }
+    .method-note { padding: 7px 10px; font-size: 11px; }
+    .chart-panel { padding: 10px 8px 8px; border-radius: 8px; }
+  }
+
+  @media (max-width: 480px) {
+    .stat-card .value { font-size: 15px; }
+  }
 </style>
 </head>
 <body>
@@ -312,6 +373,13 @@
 <header>
   <h1>割合の信頼区間</h1>
   <span>Wilson / Clopper-Pearson / 正規近似 — 手法を比較</span>
+  <button class="drawer-toggle" id="drawer-toggle" aria-label="メニュー">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+      <line x1="3" y1="6" x2="17" y2="6"/>
+      <line x1="3" y1="10" x2="17" y2="10"/>
+      <line x1="3" y1="14" x2="17" y2="14"/>
+    </svg>
+  </button>
 </header>
 
 <div class="main">
@@ -608,7 +676,8 @@ function svgText(x,y,txt,fill,size,anchor='middle',dy=0) {
 function renderCIBars(ci) {
   const svg = document.getElementById('ci-svg');
   const W = svg.clientWidth || 600, H = 160;
-  const PL = 110, PR = 16, PT = 20, PB = 26;
+  const isNarrow = W < 480;
+  const PL = isNarrow ? 70 : 110, PR = 16, PT = 20, PB = 26;
   const CW = W - PL - PR, CH = H - PT - PB;
   function px(v) { return PL + v * CW; }
 
@@ -646,7 +715,7 @@ function renderCIBars(ci) {
     s += `<circle cx="${xp}" cy="${cy}" r="4" fill="${row.color}" opacity="0.9"/>`;
     s += svgLine(x1, cy-7, x1, cy+7, row.color, 2);
     s += svgLine(x2, cy-7, x2, cy+7, row.color, 2);
-    s += svgText(PL - 8, cy + 4, row.label, row.color, 11, 'end');
+    s += svgText(PL - 8, cy + 4, row.label, row.color, isNarrow ? 9 : 11, 'end');
     // 下限・中央・上限の数値ラベル
     const loLabelX = Math.max(PL + 2, x1 - 2);
     const hiLabelX = Math.min(PL + CW - 2, x2 + 2);
@@ -670,7 +739,7 @@ function renderCIBars(ci) {
 function renderDensity(ci) {
   const svg = document.getElementById('density-svg');
   const W = svg.clientWidth || 600, H = 200;
-  const PL = 50, PR = 16, PT = 16, PB = 38;
+  const PL = W < 480 ? 36 : 50, PR = 16, PT = 16, PB = 38;
   const CW = W - PL - PR, CH = H - PT - PB;
   function px(v) { return PL + v * CW; }
 
@@ -912,6 +981,10 @@ document.getElementById('copy-btn').addEventListener('click', () => {
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = 'コピー'; btn.classList.remove('copied'); }, 1800);
   });
+});
+
+document.getElementById('drawer-toggle').addEventListener('click', () => {
+  document.querySelector('.controls').classList.toggle('open');
 });
 
 window.addEventListener('resize', renderAll);
