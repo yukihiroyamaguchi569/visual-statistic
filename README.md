@@ -41,3 +41,4 @@ open proportion-ci.html
 - 外部ライブラリ・CDN 依存なし
 - グラフ描画: SVG（手書き生成）
 - 数値計算: Lanczos 近似 lgamma、連分数展開 betainc、Newton 法 betainv
+- レスポンシブデザイン: メディアクエリによるモバイル・タブレット対応（1024px / 640px / 480px ブレークポイント）
