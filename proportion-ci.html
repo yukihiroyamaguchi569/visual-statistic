@@ -594,6 +594,7 @@ function computeCI(n, k, conf) {
 // ── Format ─────────────────────────────────────────────────────────────────
 function fmt4(v) { return v.toFixed(4); }
 function fmt3(v) { return v.toFixed(3); }
+function fmtSig2(v) { return v.toPrecision(2); }
 
 // ── SVG helpers ────────────────────────────────────────────────────────────
 function svgLine(x1,y1,x2,y2,stroke,sw,dash='') {
@@ -649,11 +650,11 @@ function renderCIBars(ci) {
     // 下限・中央・上限の数値ラベル
     const loLabelX = Math.max(PL + 2, x1 - 2);
     const hiLabelX = Math.min(PL + CW - 2, x2 + 2);
-    s += svgText(loLabelX, cy - 11, fmt4(row.ci.lo), row.color, 9, x1 < PL + 30 ? 'start' : 'end');
-    s += svgText(hiLabelX, cy - 11, fmt4(row.ci.hi), row.color, 9, x2 > PL + CW - 30 ? 'end' : 'start');
+    s += svgText(loLabelX, cy - 11, fmtSig2(row.ci.lo), row.color, 9, x1 < PL + 30 ? 'start' : 'end');
+    s += svgText(hiLabelX, cy - 11, fmtSig2(row.ci.hi), row.color, 9, x2 > PL + CW - 30 ? 'end' : 'start');
     // 区間幅
     const midX = (x1 + x2) / 2;
-    s += svgText(midX, cy + bh/2 + 12, `幅 ${fmt4(row.ci.hi - row.ci.lo)}`, row.color, 9, 'middle');
+    s += svgText(midX, cy + bh/2 + 12, `幅 ${fmtSig2(row.ci.hi - row.ci.lo)}`, row.color, 9, 'middle');
   });
 
   if (methods.length === 0) {
@@ -669,7 +670,7 @@ function renderCIBars(ci) {
 function renderDensity(ci) {
   const svg = document.getElementById('density-svg');
   const W = svg.clientWidth || 600, H = 200;
-  const PL = 50, PR = 16, PT = 16, PB = 26;
+  const PL = 50, PR = 16, PT = 16, PB = 38;
   const CW = W - PL - PR, CH = H - PT - PB;
   function px(v) { return PL + v * CW; }
 
@@ -732,8 +733,9 @@ function renderDensity(ci) {
       s += svgLine(px(m.ci.lo), PT, px(m.ci.lo), PT+CH, m.color, 1, '3 2');
       s += svgLine(px(m.ci.hi), PT, px(m.ci.hi), PT+CH, m.color, 1, '3 2');
       const loX = px(m.ci.lo), hiX = px(m.ci.hi);
-      s += svgText(loX - 3, PT + CH - 4, fmt4(m.ci.lo), m.color, 9, loX < PL + 30 ? 'start' : 'end');
-      s += svgText(hiX + 3, PT + CH - 4, fmt4(m.ci.hi), m.color, 9, hiX > PL + CW - 30 ? 'end' : 'start');
+      // x 軸の下に表示（+14: 軸ラベル行、+26: CI値行）
+      s += svgText(loX, PT + CH + 26, fmtSig2(m.ci.lo), m.color, 9, loX < PL + 24 ? 'start' : 'middle');
+      s += svgText(hiX, PT + CH + 26, fmtSig2(m.ci.hi), m.color, 9, hiX > PL + CW - 24 ? 'end' : 'middle');
     }
   });
 
